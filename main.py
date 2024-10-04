@@ -5,7 +5,7 @@ from models.base import Base
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from utils import routers_util
-
+from utils.custom_exception import register_app
 app = FastAPI()
 
 Base.metadata.create_all(bind=engine)
@@ -19,7 +19,7 @@ app.add_middleware(
 )
 
 routers_util.include_routers(app)
-
+register_app(app)
 
 @app.get("/")
 async def root():
