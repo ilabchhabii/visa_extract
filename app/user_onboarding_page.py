@@ -1,9 +1,9 @@
 import streamlit as st
 from app.database import add_user, fetch_users, add_or_update_api_key, fetch_api_keys
 import time
-from models import APIKey, RateLimit, User
+from models import APIKey, RateLimit, User, APIUsage
 from app.db_utils import get_session
-
+from sqlalchemy import func
 
 def user_onboarding():
     st.subheader("User Onboarding")
@@ -124,11 +124,12 @@ def toggle_api_key_status(api_key, current_status):
 
 def api_key_listings():
     st.subheader("API Key Listings")
+    db_session = get_session()
     api_keys = fetch_api_keys()
     if api_keys:
         st.write("***")
 
-        col1, col2, col3, col4, col5, col6, col7 = st.columns([2, 2, 3, 2, 2, 1, 1])
+        col1, col2, col3, col4, col5, col6, col7, col8, col9, col10 = st.columns([1, 1, 3, 1, 1, 1, 1, 1, 1, 1])
         with col1:
             st.markdown("<h5>Name</h5>", unsafe_allow_html=True)
         with col2:
@@ -142,55 +143,60 @@ def api_key_listings():
         with col6:
             st.markdown("<h5>Status</h5>", unsafe_allow_html=True)
         with col7:
+            st.markdown("<h5>Input Tokens</h5>", unsafe_allow_html=True)
+        with col8:
+            st.markdown("<h5>Output Tokens</h5>", unsafe_allow_html=True)
+        with col9:
+            st.markdown("<h5>Cost ($)</h5>", unsafe_allow_html=True)
+        with col10:
             st.markdown("<h5>Action</h5>", unsafe_allow_html=True)
 
         st.write("***")
         for i, (name, email, api_key, created_at, expire_at, status) in enumerate(
             api_keys
         ):
-            col1, col2, col3, col4, col5, col6, col7 = st.columns([2, 2, 3, 2, 2, 1, 1])
+            usage_data = db_session.query(
+                func.sum(APIUsage.input_tokens).label('total_input_tokens'),
+                func.sum(APIUsage.output_tokens).label('total_output_tokens'),
+                func.sum(APIUsage.cost).label('total_cost')
+            ).filter(APIUsage.api_key == api_key).first()
+
+            total_input_tokens = usage_data.total_input_tokens or 0
+            total_output_tokens = usage_data.total_output_tokens or 0
+            total_cost = usage_data.total_cost or 0.0
+
+            col1, col2, col3, col4, col5, col6, col7, col8, col9, col10 = st.columns([1, 1, 3, 1, 1, 1, 1, 1, 1, 1])
             with col1:
                 st.write(name)
             with col2:
-                st.markdown(
-                    f"<p style='color:yellow;'> {email} </p>", unsafe_allow_html=True
-                )
-
+                st.markdown(f"<p style='color:yellow;'> {email} </p>", unsafe_allow_html=True)
             with col3:
                 key_col, eye_col = st.columns([5, 1])
                 with eye_col:
                     show_key = st.checkbox("👁️", key=f"toggle_eye_{api_key}_{i}")
-
                     api_key_display = api_key if show_key else "#" * 20
-
                 with key_col:
                     st.write(api_key_display)
             with col4:
-                formatted_created_at = created_at
-
-                st.markdown(f"{str(formatted_created_at).split('.')[0]}")
+                st.markdown(f"{str(created_at).split('.')[0]}")
             with col5:
-                formatted_expire_at = expire_at
-                st.markdown(f"{str(formatted_expire_at).split('.')[0]}")
+                st.markdown(f"{str(expire_at).split('.')[0]}")
             with col6:
-                if status.lower() == "active":
-                    st.markdown(
-                        "<p style='color:green;'>Active</p>", unsafe_allow_html=True
-                    )
-                else:
-                    st.markdown(
-                        "<p style='color:red;'>Inactive</p>", unsafe_allow_html=True
-                    )
+                status_color = "green" if status.lower() == "active" else "red"
+                st.markdown(f"<p style='color:{status_color};'>{status.capitalize()}</p>", unsafe_allow_html=True)
             with col7:
-                if status == "active":
-                    toggle_label = "Deactivate"
-                else:
-                    toggle_label = "Activate"
-
+                st.write(f"{total_input_tokens:,}")
+            with col8:
+                st.write(f"{total_output_tokens:,}")
+            with col9:
+                st.write(f"{total_cost:.6f}")
+            with col10:
+                toggle_label = "Deactivate" if status == "active" else "Activate"
                 if st.button(toggle_label, key=f"toggle_{api_key}_{i}"):
                     toggle_api_key_status(api_key, status)
                     time.sleep(1)
                     st.rerun()
+                    
 
 
 def rate_limit_settings():
@@ -239,6 +245,7 @@ def rate_limit_settings():
             st.error("Invalid API key.")
 
 
+
 def user_onboarding_page():
     st.title("Ready to Onboard user?")
     tab1, tab2, tab3, tab4 = st.tabs(
@@ -252,3 +259,4 @@ def user_onboarding_page():
         api_key_listings()
     with tab4:
         rate_limit_settings()
+

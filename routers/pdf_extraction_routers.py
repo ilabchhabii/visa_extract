@@ -18,7 +18,6 @@ async def pdf_to_json_router(
     db: Session = Depends(get_session),
 ):
     
-    
     response = pdf_to_json(request, pdf_file)
     return response
     
